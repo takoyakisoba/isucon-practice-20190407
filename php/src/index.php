@@ -3,6 +3,7 @@ require_once __DIR__.'/vendor/autoload.php';
 require_once 'limonade/lib/limonade.php';
 
 const REDIS_KEY_IPS = 'ips';
+const REDIS_KEY_IDS = 'ids';
 
 function configure() {
   option('base_uri', '/');
@@ -71,6 +72,10 @@ function login_log($succeeded, $login, $user_id=null) {
     redis_clear(REDIS_KEY_IPS, $ip);
   } else {
     redis_set(REDIS_KEY_IPS, $ip, redis_get(REDIS_KEY_IPS, $ip) + 1);
+
+    if (!is_null($user_id)) {
+      redis_set(REDIS_KEY_IDS, $user_id, redis_get(REDIS_KEY_IDS, $user_id) + 1);
+    }
   }
 
   $stmt = $db->prepare('INSERT INTO login_log (`created_at`, `user_id`, `login`, `ip`, `succeeded`) VALUES (NOW(),:user_id,:login,:ip,:succeeded)');
@@ -102,15 +107,8 @@ function redis_clear($key, $hashKey) {
 function user_locked($user) {
   if (empty($user)) { return null; }
 
-  $db = option('db_conn');
-
-  $stmt = $db->prepare('SELECT COUNT(1) AS failures FROM login_log WHERE user_id = :user_id AND id > IFNULL((select id from login_log where user_id = :user_id AND succeeded = 1 ORDER BY id DESC LIMIT 1), 0)');
-  $stmt->bindValue(':user_id', $user['id']);
-  $stmt->execute();
-  $log = $stmt->fetch(PDO::FETCH_ASSOC);
-
   $config = option('config');
-  return $config['user_lock_threshold'] <= $log['failures'];
+  return $config['user_lock_threshold'] <= redis_get(REDIS_KEY_IDS, $user['id']);
 }
 
 function ip_banned() {
