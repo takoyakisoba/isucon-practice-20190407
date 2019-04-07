@@ -70,6 +70,7 @@ function login_log($succeeded, $login, $user_id=null) {
 
   if ($succeeded) {
     redis_clear(REDIS_KEY_IPS, $ip);
+    redis_clear(REDIS_KEY_IDS, $user_id);
   } else {
     redis_set(REDIS_KEY_IPS, $ip, redis_get(REDIS_KEY_IPS, $ip) + 1);
 
