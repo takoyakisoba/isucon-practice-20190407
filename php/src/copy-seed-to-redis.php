@@ -62,7 +62,7 @@ function exportUserFailures(PDO $db): array
     $stmt->execute();
     $userIdAndLastSucceededIds = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-    $failuresCountEachIp = [];
+    $failuresCountEachUser = [];
 
     foreach ($userIdAndLastSucceededIds as $r) {
         $userId = $r['user_id'];
@@ -79,10 +79,10 @@ function exportUserFailures(PDO $db): array
     ');
         $stmt->execute([$userId, $lastSucceededId]);
         $r = $stmt->fetch(PDO::FETCH_ASSOC);
-        $failuresCountEachIp[$userId] = (int) $r['failure_count'];
+        $failuresCountEachUser[$userId] = (int) $r['failure_count'];
     }
 
-    return $failuresCountEachIp;
+    return $failuresCountEachUser;
 }
 
 function importUserFailures(array $users, Predis\Client $redis)
