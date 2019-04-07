@@ -1,4 +1,6 @@
 {
     "name": "pinkumohikan/waiwai-isucon4",
-    "require": {}
+    "require": {
+        "predis/predis": "^1.1"
+    }
 }
