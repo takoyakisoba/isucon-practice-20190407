@@ -28,6 +28,14 @@ function configure() {
 
   option('db_conn', $db);
 
+  $redis = new Predis\Client([
+      'scheme' => 'tcp',
+      'host'   => getenv('ISU4_REDIS_HOST'),
+      'port'   => 6379,
+  ]);
+
+  option('redis_conn', $redis);
+
   $config = [
     'user_lock_threshold' => getenv('ISU4_USER_LOCK_THRESHOLD') ?: 3,
     'ip_ban_threshold' => getenv('ISU4_IP_BAN_THRESHOLD') ?: 10
@@ -242,6 +250,7 @@ dispatch_post('/login', function() {
   }
 });
 
+
 dispatch_get('/mypage', function() {
   $user = current_user();
 
@@ -261,6 +270,11 @@ dispatch_get('/report', function() {
     'banned_ips' => banned_ips(),
     'locked_users' => locked_users()
   ]);
+});
+
+dispatch_get('/ping', function() {
+  $redis = option('redis_conn');
+  echo $redis->ping();
 });
 
 run();
