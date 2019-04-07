@@ -14,4 +14,4 @@ mysql -h ${myhost} -P ${myport} -u ${myuser} ${mydb} < sql/dummy_log.sql
 mysql -h ${myhost} -P ${myport} -u ${myuser} ${mydb} < sql/index.sql
 
 redis-cli flushall
-php php/src/copy-seed-to-redis.php
+php7 waiwai-isucon4/php/src/copy-seed-to-redis.php
