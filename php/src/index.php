@@ -71,10 +71,29 @@ function login_log($succeeded, $login, $user_id=null) {
   $stmt->execute();
 }
 
+function redis_set($key, $hashKey, $hashVal) {
+    $redis = option('redis_conn');
+
+    $redis->hset($key, $hashKey, $hashVal);
+}
+
+function redis_get($key, $hashKey) {
+    $redis = option('redis_conn');
+
+    return $redis->hget($key, $hashKey);
+}
+
+function redis_clear($key, $hashKey) {
+    $redis = option ('redis_conn');
+
+    $redis->hdel($key, $hashKey);
+}
+
 function user_locked($user) {
   if (empty($user)) { return null; }
 
   $db = option('db_conn');
+
   $stmt = $db->prepare('SELECT COUNT(1) AS failures FROM login_log WHERE user_id = :user_id AND id > IFNULL((select id from login_log where user_id = :user_id AND succeeded = 1 ORDER BY id DESC LIMIT 1), 0)');
   $stmt->bindValue(':user_id', $user['id']);
   $stmt->execute();
@@ -84,16 +103,10 @@ function user_locked($user) {
   return $config['user_lock_threshold'] <= $log['failures'];
 }
 
-# FIXME
 function ip_banned() {
-  $db = option('db_conn');
-  $stmt = $db->prepare('SELECT COUNT(1) AS failures FROM login_log WHERE ip = :ip AND id > IFNULL((select id from login_log where ip = :ip AND succeeded = 1 ORDER BY id DESC LIMIT 1), 0)');
-  $stmt->bindValue(':ip', $_SERVER['REMOTE_ADDR']);
-  $stmt->execute();
-  $log = $stmt->fetch(PDO::FETCH_ASSOC);
-
   $config = option('config');
-  return $config['ip_ban_threshold'] <= $log['failures'];
+
+  return $config['ip_ban_threshold'] <= redis_get('ips', $_SERVER['REMOTE_ADDR']);
 }
 
 function attempt_login($login, $password) {
@@ -103,6 +116,8 @@ function attempt_login($login, $password) {
   $stmt->bindValue(':login', $login);
   $stmt->execute();
   $user = $stmt->fetch(PDO::FETCH_ASSOC);
+
+  $ip = $_SERVER['REMOTE_ADDR'];
 
   if (ip_banned()) {
     login_log(false, $login, isset($user['id']) ? $user['id'] : null);
@@ -116,14 +131,18 @@ function attempt_login($login, $password) {
 
   if (!empty($user) && calculate_password_hash($password, $user['salt']) == $user['password_hash']) {
     login_log(true, $login, $user['id']);
+    redis_clear('ips', $ip);
     return ['user' => $user];
   }
   elseif (!empty($user)) {
     login_log(false, $login, $user['id']);
+    $ip = $_SERVER['REMOTE_ADDR'];
+    redis_set('ips', $ip, redis_get('ips', $ip) + 1);
     return ['error' => 'wrong_password'];
   }
   else {
     login_log(false, $login);
+    redis_set('ips', $ip, redis_get('ips', $ip) + 1);
     return ['error' => 'wrong_login'];
   }
 }
@@ -249,7 +268,6 @@ dispatch_post('/login', function() {
     return redirect_to('/');
   }
 });
-
 
 dispatch_get('/mypage', function() {
   $user = current_user();
