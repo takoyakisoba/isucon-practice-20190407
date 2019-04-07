@@ -20,6 +20,7 @@ services:
       - "./:/workspace"
     environment:
       ISU4_DB_HOST: "dev-db"
+      ISU4_REDIS_HOST: "redis"
 
   redis:
     image: redis:3.2.12
