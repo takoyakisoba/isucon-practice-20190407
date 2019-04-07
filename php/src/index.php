@@ -2,6 +2,8 @@
 require_once __DIR__.'/vendor/autoload.php';
 require_once 'limonade/lib/limonade.php';
 
+const REDIS_KEY_IPS = 'ips';
+
 function configure() {
   option('base_uri', '/');
   option('session', 'isu4_qualifier_session');
@@ -63,6 +65,14 @@ function calculate_password_hash($password, $salt) {
 function login_log($succeeded, $login, $user_id=null) {
   $db = option('db_conn');
 
+  $ip = $_SERVER['REMOTE_ADDR'];
+
+  if ($succeeded) {
+    redis_clear(REDIS_KEY_IPS, $ip);
+  } else {
+    redis_set(REDIS_KEY_IPS, $ip, redis_get(REDIS_KEY_IPS, $ip) + 1);
+  }
+
   $stmt = $db->prepare('INSERT INTO login_log (`created_at`, `user_id`, `login`, `ip`, `succeeded`) VALUES (NOW(),:user_id,:login,:ip,:succeeded)');
   $stmt->bindValue(':user_id', $user_id);
   $stmt->bindValue(':login', $login);
@@ -106,7 +116,7 @@ function user_locked($user) {
 function ip_banned() {
   $config = option('config');
 
-  return $config['ip_ban_threshold'] <= redis_get('ips', $_SERVER['REMOTE_ADDR']);
+  return $config['ip_ban_threshold'] <= redis_get(REDIS_KEY_IPS, $_SERVER['REMOTE_ADDR']);
 }
 
 function attempt_login($login, $password) {
@@ -116,8 +126,6 @@ function attempt_login($login, $password) {
   $stmt->bindValue(':login', $login);
   $stmt->execute();
   $user = $stmt->fetch(PDO::FETCH_ASSOC);
-
-  $ip = $_SERVER['REMOTE_ADDR'];
 
   if (ip_banned()) {
     login_log(false, $login, isset($user['id']) ? $user['id'] : null);
@@ -131,17 +139,14 @@ function attempt_login($login, $password) {
 
   if (!empty($user) && calculate_password_hash($password, $user['salt']) == $user['password_hash']) {
     login_log(true, $login, $user['id']);
-    redis_clear('ips', $ip);
     return ['user' => $user];
   }
   elseif (!empty($user)) {
     login_log(false, $login, $user['id']);
-    redis_set('ips', $ip, redis_get('ips', $ip) + 1);
     return ['error' => 'wrong_password'];
   }
   else {
     login_log(false, $login);
-    redis_set('ips', $ip, redis_get('ips', $ip) + 1);
     return ['error' => 'wrong_login'];
   }
 }
