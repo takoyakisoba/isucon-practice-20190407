@@ -9,6 +9,8 @@ RUN ln -sf /dev/stdout /var/log/nginx/access.log \
 RUN apk add --no-cache --repository http://dl-cdn.alpinelinux.org/alpine/edge/community/ gnu-libiconv
 ENV LD_PRELOAD /usr/lib/preloadable_libiconv.so php
 
+RUN apk  add --no-cache redis
+
 RUN docker-php-ext-install pdo_mysql mbstring
 
 COPY ./docker_files/php/php-fpm.d/zz-docker.conf /usr/local/etc/php-fpm.d/zz-docker.conf
