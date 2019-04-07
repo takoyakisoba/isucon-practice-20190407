@@ -87,10 +87,13 @@ function redis_set($key, $hashKey, $hashVal) {
     $redis->hset($key, $hashKey, $hashVal);
 }
 
-function redis_get($key, $hashKey) {
+function redis_get($key, $hashKey=null) {
     $redis = option('redis_conn');
 
-    return $redis->hget($key, $hashKey);
+    if (is_null($hashKey)) {
+        return $redis->hgetall($key);
+    }
+    return $redis->hget($key, $hashKey) ?: 0;
 }
 
 function redis_clear($key, $hashKey) {
