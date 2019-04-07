@@ -136,7 +136,6 @@ function attempt_login($login, $password) {
   }
   elseif (!empty($user)) {
     login_log(false, $login, $user['id']);
-    $ip = $_SERVER['REMOTE_ADDR'];
     redis_set('ips', $ip, redis_get('ips', $ip) + 1);
     return ['error' => 'wrong_password'];
   }
