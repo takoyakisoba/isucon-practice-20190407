@@ -30,7 +30,7 @@ function configure() {
 
   $redis = new Predis\Client([
       'scheme' => 'tcp',
-      'host'   => getenv('ISU4_REDIS_HOST'),
+      'host'   => getenv('ISU4_REDIS_HOST') ?: 'localhost',
       'port'   => 6379,
   ]);
 
