@@ -2,6 +2,8 @@
 require_once __DIR__.'/vendor/autoload.php';
 require_once 'limonade/lib/limonade.php';
 
+const REDIS_KEY_IPS = 'ips';
+
 function configure() {
   option('base_uri', '/');
   option('session', 'isu4_qualifier_session');
@@ -63,6 +65,14 @@ function calculate_password_hash($password, $salt) {
 function login_log($succeeded, $login, $user_id=null) {
   $db = option('db_conn');
 
+  $ip = $_SERVER['REMOTE_ADDR'];
+
+  if ($succeeded) {
+    redis_clear(REDIS_KEY_IPS, $ip);
+  } else {
+    redis_set(REDIS_KEY_IPS, $ip, redis_get(REDIS_KEY_IPS, $ip) + 1);
+  }
+
   $stmt = $db->prepare('INSERT INTO login_log (`created_at`, `user_id`, `login`, `ip`, `succeeded`) VALUES (NOW(),:user_id,:login,:ip,:succeeded)');
   $stmt->bindValue(':user_id', $user_id);
   $stmt->bindValue(':login', $login);
@@ -71,10 +81,29 @@ function login_log($succeeded, $login, $user_id=null) {
   $stmt->execute();
 }
 
+function redis_set($key, $hashKey, $hashVal) {
+    $redis = option('redis_conn');
+
+    $redis->hset($key, $hashKey, $hashVal);
+}
+
+function redis_get($key, $hashKey) {
+    $redis = option('redis_conn');
+
+    return $redis->hget($key, $hashKey) ?: 0;
+}
+
+function redis_clear($key, $hashKey) {
+    $redis = option ('redis_conn');
+
+    $redis->hdel($key, $hashKey);
+}
+
 function user_locked($user) {
   if (empty($user)) { return null; }
 
   $db = option('db_conn');
+
   $stmt = $db->prepare('SELECT COUNT(1) AS failures FROM login_log WHERE user_id = :user_id AND id > IFNULL((select id from login_log where user_id = :user_id AND succeeded = 1 ORDER BY id DESC LIMIT 1), 0)');
   $stmt->bindValue(':user_id', $user['id']);
   $stmt->execute();
@@ -84,16 +113,10 @@ function user_locked($user) {
   return $config['user_lock_threshold'] <= $log['failures'];
 }
 
-# FIXME
 function ip_banned() {
-  $db = option('db_conn');
-  $stmt = $db->prepare('SELECT COUNT(1) AS failures FROM login_log WHERE ip = :ip AND id > IFNULL((select id from login_log where ip = :ip AND succeeded = 1 ORDER BY id DESC LIMIT 1), 0)');
-  $stmt->bindValue(':ip', $_SERVER['REMOTE_ADDR']);
-  $stmt->execute();
-  $log = $stmt->fetch(PDO::FETCH_ASSOC);
-
   $config = option('config');
-  return $config['ip_ban_threshold'] <= $log['failures'];
+
+  return $config['ip_ban_threshold'] <= redis_get(REDIS_KEY_IPS, $_SERVER['REMOTE_ADDR']);
 }
 
 function attempt_login($login, $password) {
@@ -249,7 +272,6 @@ dispatch_post('/login', function() {
     return redirect_to('/');
   }
 });
-
 
 dispatch_get('/mypage', function() {
   $user = current_user();
