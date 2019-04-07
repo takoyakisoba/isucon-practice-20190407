@@ -1,0 +1,22 @@
+version: "3"
+
+services:
+  dev-db:
+    image: mysql:5.5
+    ports:
+      - 3306:3306
+    environment:
+      MYSQL_ALLOW_EMPTY_PASSWORD: "true"
+      ISU4_DB_HOST: "dev-db"
+    volumes:
+      - "./:/workspace"
+      - "./mysql/my.cnf:/etc/mysql/my.cnf:ro"
+
+  php:
+    build: ./
+    ports:
+      - "0.0.0.0:8000:80"
+    volumes:
+      - "./:/workspace"
+    environment:
+      ISU4_DB_HOST: "dev-db"
