@@ -4,6 +4,7 @@ require_once __DIR__.'/vendor/autoload.php';
 
 const IP_BAN_THRESHOLD = 10;
 const REDIS_KEY_IPS = "ips";
+const REDIS_KEY_IDS = "ids";
 
 function exportIpFailures(PDO $db): array
 {
@@ -48,6 +49,49 @@ function importIpFailures(array $ips, Predis\Client $redis)
     }
 }
 
+function exportUserFailures(PDO $db): array
+{
+    $stmt = $db->prepare('
+    select
+      log.user_id,
+      ifnull(last.last_succeeded_id, 0) as last_succeeded_id
+    from login_log as log
+    left join (select user_id, max(id) as last_succeeded_id from login_log where succeeded = 1 group by user_id) as last on last.user_id = log.user_id
+    group by user_id
+    ');
+    $stmt->execute();
+    $userIdAndLastSucceededIds = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+    $failuresCountEachUser = [];
+
+    foreach ($userIdAndLastSucceededIds as $r) {
+        $userId = $r['user_id'];
+        assert(is_string($userId));
+        $lastSucceededId = $r['last_succeeded_id'];
+        assert(is_numeric($lastSucceededId));
+        $stmt = $db->prepare('
+    select count(*) as failure_count
+    from login_log
+    where
+        user_id = ?
+        and id > ?
+        and succeeded = 0
+    ');
+        $stmt->execute([$userId, $lastSucceededId]);
+        $r = $stmt->fetch(PDO::FETCH_ASSOC);
+        $failuresCountEachUser[$userId] = (int) $r['failure_count'];
+    }
+
+    return $failuresCountEachUser;
+}
+
+function importUserFailures(array $users, Predis\Client $redis)
+{
+    foreach ($users as $userId => $count) {
+        $redis->hset(REDIS_KEY_IDS, $userId, $count);
+    }
+}
+
 function main()
 {
     $host = getenv('ISU4_DB_HOST') ?: 'localhost';
@@ -72,6 +116,9 @@ function main()
 
     $ips = exportIpFailures($db);
     importIpFailures($ips, $redis);
+
+    $ids = exportUserFailures($db);
+    importUserFailures($ids, $redis);
 }
 
 main();
